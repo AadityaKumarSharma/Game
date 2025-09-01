@@ -1,0 +1,352 @@
+<!DOCTYPE html><html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
+  <title>Cute Puppy Catch 🐶 – For My Bestie</title>
+  <meta name="description" content="A cute HTML5 puppy game with background music (Sahiba). Tap to start!" />
+  <style>
+    :root{
+      --bg1:#ffe4f3; --bg2:#e6f3ff; --accent:#ff7bbf; --accent2:#7b9dff; --ink:#2b2b2b;
+    }
+    html,body{height:100%;margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Emoji,sans-serif;color:var(--ink);}
+    body{
+      background: radial-gradient(1200px 600px at 20% 0%, var(--bg1), transparent),
+                  radial-gradient(1200px 600px at 80% 100%, var(--bg2), transparent),
+                  linear-gradient(180deg,#fff, #fff0);
+      overflow:hidden;
+    }
+    .wrap{position:relative;max-width:920px;margin:0 auto;height:100%;}
+    header{position:absolute;top:10px;left:0;right:0;display:flex;justify-content:space-between;align-items:center;padding:8px 16px;z-index:3}
+    .badge{background:#fff;border:2px solid #0001;padding:8px 12px;border-radius:999px;box-shadow:0 6px 18px #0001;display:flex;gap:10px;align-items:center}
+    .badge .dot{width:10px;height:10px;border-radius:50%;background:var(--accent)}
+    .controls{display:flex;gap:8px}
+    button{border:none;background:#fff;border:2px solid #0002;padding:10px 14px;border-radius:14px;cursor:pointer;box-shadow:0 6px 18px #0001;font-weight:700}
+    button:active{transform:translateY(1px)}
+    canvas{display:block;margin:0 auto;position:absolute;inset:0;width:100%;height:100%}
+    .overlay{position:absolute;inset:0;display:grid;place-items:center;background:linear-gradient(180deg,#ffffffcc,#ffffffcc);backdrop-filter: blur(4px);z-index:4}
+    .card{background:#fff;border:2px solid #0001;padding:24px 20px;border-radius:20px;box-shadow:0 30px 60px #0002;text-align:center;max-width:520px}
+    .title{font-size:clamp(22px,4vw,34px);font-weight:900;margin:0 0 6px}
+    .subtitle{margin:0 0 14px;font-weight:600}
+    .pill{display:inline-flex;gap:6px;align-items:center;background:linear-gradient(90deg,var(--accent),var(--accent2));color:#fff;padding:10px 14px;border-radius:999px;font-weight:800}
+    .tiny{font-size:12px;opacity:.7}
+    .hud{position:absolute;bottom:14px;left:0;right:0;display:flex;justify-content:center;gap:10px;z-index:3}
+    .dpad{display:none;gap:10px}
+    .dpad button{font-size:18px;padding:14px 18px}
+    @media (max-width:820px){
+      .dpad{display:flex}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="badge" id="scoreBadge"><span class="dot"></span><span>Score: <b id="score">0</b></span></div>
+      <div class="controls">
+        <button id="muteBtn" title="Mute/Unmute">🔊</button>
+        <button id="pauseBtn" title="Pause/Resume">⏸️</button>
+        <button id="restartBtn" title="Restart">🔄</button>
+      </div>
+    </header><canvas id="game" width="900" height="600" aria-label="Cute Puppy Game"></canvas>
+
+<div class="hud">
+  <div class="dpad" aria-label="Touch controls">
+    <button id="leftBtn">⬅️</button>
+    <button id="jumpBtn">⤴️</button>
+    <button id="rightBtn">➡️</button>
+  </div>
+</div>
+
+<div class="overlay" id="startOverlay">
+  <div class="card">
+    <div style="font-size:42px">🐶🦴💖</div>
+    <h1 class="title">Cute Puppy Catch – For My Bestie</h1>
+    <p class="subtitle">Catch the bones, dodge the broccoli, and vibe to <b>Sahiba</b> 🎵</p>
+    <p class="tiny">Tip: Works on phone too. Use the on‑screen buttons or tilt your phone (if supported).</p>
+    <div style="display:flex;gap:10px;justify-content:center;margin:12px 0 18px">
+      <button class="pill" id="startBtn">▶️ Play with Music</button>
+      <button class="pill" id="startMutedBtn">🤫 Play (Muted)</button>
+    </div>
+    <p class="tiny">Music file note: This page looks for <code>assets/sahiba.mp3</code>. Replace it with your own licensed copy or click “Play (Muted)”.</p>
+  </div>
+</div>
+
+  </div>  <!-- Background Music -->  <!--
+    ⚠️ IMPORTANT: We cannot bundle copyrighted songs here.
+    To use Sahiba, put a properly licensed MP3 at: assets/sahiba.mp3 (relative to this HTML file),
+    or replace the src below with your own file URL you are allowed to use.
+    Many streaming links (like YouTube) will not play due to browser restrictions/CORS.
+  --><audio id="bgm" src="assets/sahiba.mp3" preload="auto" loop></audio>
+
+  <script>
+  // ===== Utility =====
+  const rand = (a,b)=>Math.random()*(b-a)+a;
+  const clamp=(v,mi,ma)=>Math.max(mi,Math.min(ma,v));
+  const lerp=(a,b,t)=>a+(b-a)*t;
+
+  // ===== Canvas & State =====
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  let W = canvas.width, H = canvas.height;
+  function fit(){
+    // Keep aspect by CSS only; canvas resolution stays fixed for crisp text.
+  }
+  window.addEventListener('resize', fit);
+
+  // Game constants
+  const G = 0.6; // gravity
+  const FLOOR = H - 60;
+  const PUPPY = { x: W/2, y: FLOOR, vx:0, vy:0, w:64, h:58, speed:7, onGround:true };
+  let bones = []; // collectibles
+  let bads = [];  // hazards
+  let hearts = 3;
+  let score = 0;
+  let best = +localStorage.getItem('puppy_best')||0;
+  let running = false;
+  let paused = false;
+  let tiltOn = false;
+
+  // Input
+  const keys = new Set();
+  window.addEventListener('keydown', e=>{ keys.add(e.key.toLowerCase()); if(['arrowleft','arrowright',' '].includes(e.key.toLowerCase())) e.preventDefault(); });
+  window.addEventListener('keyup', e=> keys.delete(e.key.toLowerCase()));
+
+  // Touch buttons
+  const leftBtn = document.getElementById('leftBtn');
+  const rightBtn = document.getElementById('rightBtn');
+  const jumpBtn = document.getElementById('jumpBtn');
+  function bindHold(btn, key){
+    let down=false;
+    const on = ()=>{down=true; keys.add(key)};
+    const off= ()=>{down=false; keys.delete(key)};
+    btn.addEventListener('touchstart', e=>{e.preventDefault(); on()},{passive:false});
+    btn.addEventListener('touchend',   e=>{e.preventDefault(); off()},{passive:false});
+    btn.addEventListener('mousedown', on);
+    btn.addEventListener('mouseup', off);
+    btn.addEventListener('mouseleave', off);
+  }
+  bindHold(leftBtn,'arrowleft');
+  bindHold(rightBtn,'arrowright');
+  jumpBtn.addEventListener('click', ()=> jump());
+
+  // Gyro/Tilt (optional)
+  if (window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === 'function'){
+    // iOS needs permission; we'll request on start.
+  } else if (window.DeviceOrientationEvent){
+    window.addEventListener('deviceorientation', e=>{
+      if (!tiltOn) return;
+      const gamma = e.gamma||0; // left/right tilt
+      PUPPY.vx = clamp(gamma/3, -PUPPY.speed, PUPPY.speed);
+    });
+  }
+
+  // Music controls
+  const bgm = document.getElementById('bgm');
+  const muteBtn = document.getElementById('muteBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const restartBtn = document.getElementById('restartBtn');
+  const startOverlay = document.getElementById('startOverlay');
+  const startBtn = document.getElementById('startBtn');
+  const startMutedBtn = document.getElementById('startMutedBtn');
+
+  muteBtn.addEventListener('click', ()=>{
+    bgm.muted = !bgm.muted;
+    muteBtn.textContent = bgm.muted ? '🔇' : '🔊';
+  });
+  pauseBtn.addEventListener('click', ()=>{
+    paused = !paused; pauseBtn.textContent = paused ? '▶️' : '⏸️';
+  });
+  restartBtn.addEventListener('click', ()=> reset(true));
+
+  async function startGame(withSound=true){
+    startOverlay.style.display='none';
+    running = true; paused=false; score=0; hearts=3; bones=[]; bads=[];
+    if (withSound){
+      try{
+        if (window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === 'function'){
+          try{ await DeviceOrientationEvent.requestPermission(); tiltOn=true; }catch{ /* ignore */ }
+        }
+        bgm.muted = false;
+        await bgm.play();
+      }catch(err){
+        // Could not autoplay (no file or blocked) -> fall back to muted
+        bgm.muted = true; muteBtn.textContent='🔇';
+      }
+    } else {
+      bgm.pause(); bgm.currentTime=0; bgm.muted=true; muteBtn.textContent='🔇';
+    }
+    loop();
+  }
+
+  startBtn.addEventListener('click', ()=> startGame(true));
+  startMutedBtn.addEventListener('click', ()=> startGame(false));
+
+  // Jump
+  function jump(){
+    if (PUPPY.onGround){ PUPPY.vy = -12.5; PUPPY.onGround = false; }
+  }
+  window.addEventListener('keydown', e=>{ if(e.key===' '||e.key==='ArrowUp') jump(); });
+
+  // Spawning
+  let t=0;
+  function spawn(){
+    if (Math.random() < 0.75){ // more bones than bads
+      bones.push({x: rand(40,W-40), y:-20, r:18, vy: rand(3,6)});
+    } else {
+      bads.push({x: rand(40,W-40), y:-20, r:18, vy: rand(3,6)});
+    }
+  }
+
+  // Reset
+  function reset(restartMusic=false){
+    score=0; hearts=3; bones=[]; bads=[]; PUPPY.x=W/2; PUPPY.y=FLOOR; PUPPY.vx=0; PUPPY.vy=0; PUPPY.onGround=true; paused=false; running=true;
+    if(restartMusic){ bgm.currentTime=0; if(!bgm.muted) bgm.play().catch(()=>{}); }
+  }
+
+  // Collision helper
+  function hit(ax,ay,ar,bx,by,br){
+    const dx=ax-bx, dy=ay-by; return Math.hypot(dx,dy) < ar+br;
+  }
+
+  // Draw helpers
+  function drawHeart(x,y,filled=true){
+    ctx.save(); ctx.font='24px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('❤',x,y); ctx.restore();
+  }
+  function drawPuppy(x,y){
+    // Cute emoji puppy
+    ctx.save(); ctx.font='42px Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('🐶', x, y);
+    ctx.restore();
+  }
+  function drawBone(x,y){
+    ctx.save(); ctx.font='34px Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('🦴', x, y);
+    ctx.restore();
+  }
+  function drawBad(x,y){
+    ctx.save(); ctx.font='34px Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('🥦', x, y);
+    ctx.restore();
+  }
+
+  // Main loop
+  function loop(){
+    if (!running) return;
+    requestAnimationFrame(loop);
+    if (paused) { draw(true); return; }
+    update();
+    draw();
+  }
+
+  function update(){
+    t++;
+    if (t%30===0) spawn();
+
+    // Input
+    const left  = keys.has('arrowleft') || keys.has('a');
+    const right = keys.has('arrowright') || keys.has('d');
+    if (!tiltOn){
+      if (left && !right) PUPPY.vx = lerp(PUPPY.vx, -PUPPY.speed, .6);
+      else if (right && !left) PUPPY.vx = lerp(PUPPY.vx,  PUPPY.speed, .6);
+      else PUPPY.vx = lerp(PUPPY.vx, 0, .3);
+    }
+
+    PUPPY.x = clamp(PUPPY.x + PUPPY.vx, 40, W-40);
+    PUPPY.vy += G;
+    PUPPY.y += PUPPY.vy;
+    if (PUPPY.y >= FLOOR){ PUPPY.y = FLOOR; PUPPY.vy = 0; PUPPY.onGround = true; }
+
+    // Move items
+    bones.forEach(b=>{ b.y += b.vy; });
+    bads.forEach(b=>{ b.y += b.vy; });
+
+    // Collisions
+    for (let i=bones.length-1;i>=0;i--){
+      const b=bones[i];
+      if (hit(PUPPY.x, PUPPY.y-6, 28, b.x, b.y, b.r)){
+        bones.splice(i,1); score += 5; bump();
+      } else if (b.y>H+50) bones.splice(i,1);
+    }
+    for (let i=bads.length-1;i>=0;i--){
+      const b=bads[i];
+      if (hit(PUPPY.x, PUPPY.y-6, 28, b.x, b.y, b.r)){
+        bads.splice(i,1); hearts--; shake();
+        if (hearts<=0){ gameOver(); return; }
+      } else if (b.y>H+50) bads.splice(i,1);
+    }
+
+    // Gradual difficulty
+    if (t%600===0){ // every ~10s add speed
+      bones.forEach(o=>o.vy+=0.5); bads.forEach(o=>o.vy+=0.5);
+    }
+
+    document.getElementById('score').textContent = score;
+  }
+
+  // Tiny screen shake + score bump
+  let shakeT=0, bumpT=0;
+  function shake(){ shakeT=12; }
+  function bump(){ bumpT=10; }
+
+  function draw(freeze=false){
+    // BG sky
+    ctx.clearRect(0,0,W,H);
+    const grd = ctx.createLinearGradient(0,0,0,H);
+    grd.addColorStop(0,'#fef6ff'); grd.addColorStop(1,'#eaf6ff');
+    ctx.fillStyle = grd; ctx.fillRect(0,0,W,H);
+
+    // Ground
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0,FLOOR+24,W,H-FLOOR);
+
+    // Decorative clouds/hearts
+    ctx.globalAlpha = 0.06; ctx.fillStyle = '#ff7bbf';
+    for(let i=0;i<8;i++){ ctx.beginPath(); ctx.arc((i*150 + (t*0.3)%1500)% (W+200)-100, 90+ (i%3)*20, 40, 0, Math.PI*2); ctx.fill(); }
+    ctx.globalAlpha = 1;
+
+    // UI Hearts
+    for(let i=0;i<3;i++) drawHeart(80+28*i,50, i<hearts);
+
+    // Score best
+    ctx.save(); ctx.font='14px system-ui'; ctx.fillStyle='#555'; ctx.textAlign='right'; ctx.fillText(`Best: ${best}`, W-20, 36); ctx.restore();
+
+    // Screen shake
+    let ox=0, oy=0; if (shakeT>0){ ox = (Math.random()-0.5)*8; oy=(Math.random()-0.5)*8; shakeT--; }
+    ctx.save(); ctx.translate(ox,oy);
+
+    // Items
+    bones.forEach(b=> drawBone(b.x,b.y));
+    bads.forEach(b=> drawBad(b.x,b.y));
+
+    // Puppy (bump scale)
+    let scale = 1 + (bumpT>0? (bumpT--, 0.1*(bumpT/10)) : 0);
+    ctx.save(); ctx.translate(PUPPY.x, PUPPY.y);
+    ctx.scale(scale,scale);
+    drawPuppy(0,0);
+    ctx.restore();
+
+    ctx.restore();
+
+    if (freeze){
+      ctx.save(); ctx.fillStyle='#0008'; ctx.fillRect(0,0,W,H);
+      ctx.fillStyle='#fff'; ctx.font='24px system-ui'; ctx.textAlign='center'; ctx.fillText('Paused', W/2, H/2);
+      ctx.restore();
+    }
+  }
+
+  function gameOver(){
+    running=false; best = Math.max(best, score); localStorage.setItem('puppy_best', best);
+    ctx.save(); ctx.fillStyle='#0006'; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='#fff'; ctx.font='28px system-ui'; ctx.textAlign='center';
+    ctx.fillText('Game Over 💔', W/2, H/2-20);
+    ctx.fillText(`Score: ${score}   Best: ${best}`, W/2, H/2+18);
+    ctx.restore();
+    setTimeout(()=>{
+      startOverlay.style.display='grid';
+    }, 900);
+  }
+
+  // Initial paint
+  draw(true);
+  </script></body>
+</html>
